@@ -1,8 +1,10 @@
 PREFIX=${PARSECDIR}/pkgs/kernels/streamcluster/inst/${PARSECPLAT}
 
 TARGET_C = sc_cpu
-
 TARGET_O = sc_omp
+CLANG = clang++
+CC_FLAGS = -g -fopenmp -O2
+LLVM_FLAGS = -c -emit-llvm
 
 ifdef version
   ifeq "$(version)" "parallel"
@@ -10,12 +12,26 @@ ifdef version
   endif
 endif
 
-all: cpu omp
+all: cpu_llvm omp_llvm cpu_clang omp_clang
 
-cpu:
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) streamcluster_original.cpp -o $(TARGET_C) $(LIBS) -DENABLE_THREADS -pthread
+cpu_llvm:
+	$(CLANG) $(CC_FLAGS) ${LLVM_FLAGS} streamcluster_original.cpp -o $(TARGET_C).bc $(LIBS) -DENABLE_THREADS -pthread
 
-omp:
+omp_llvm:
+	${CLANG} ${CC_FLAGS} ${LLVM_FLAGS} -o $(TARGET_O).bc streamcluster_omp.cpp
+
+cpu_clang:
+	$(CLANG) $(CC_FLAGS) streamcluster_original.cpp -o $(TARGET_C) $(LIBS) -DENABLE_THREADS -pthread
+
+omp_clang:
+	${CLANG} ${CC_FLAGS} -o $(TARGET_O) streamcluster_omp.cpp
+
+cpu_gcc:
+	$(CXX) $(CXXFLAGS) streamcluster_original.cpp -o $(TARGET_C) $(LIBS) -DENABLE_THREADS -pthread
+# original:
+#	$(CXX) $(CXXFLAGS) streamcluster_original.cpp -o $(TARGET_C) $(LIBS) -DENABLE_THREADS -pthread
+
+omp_gcc:
 	g++ -O3 -fopenmp -o $(TARGET_O) streamcluster_omp.cpp
 
 
