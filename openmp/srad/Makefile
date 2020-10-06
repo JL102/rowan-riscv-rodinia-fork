@@ -1,4 +1,6 @@
 
+.PHONY: SRAD_V1 SRAD_V2
+
 all: SRAD_V1 SRAD_V2
 
 SRAD_V1:
