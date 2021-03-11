@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-# ir-parser.py
-# counts the number of each instruction of each data type is present in an LLVM IR, stores in a nested list (boxes)
+# chipyard-bmark-dump-parser.py
+# counts the number of each instruction of each data type is present in an assembly dump of the chipyard benchmarks, stores in a nested list
 # prints the results, and calculates percentages
-# IR file is specified as a command-line argument
-# known issues:
-#   -won't count instructions with struct data type - should count them in the instruction and instruction type counters, but doesn't count the struct data type
-#   -counts array data types as just one of the array's base data type
+# dump file is specified as a command-line argument
+# outputs to stdout and generates a .csv file
 
 import os
 import sys
