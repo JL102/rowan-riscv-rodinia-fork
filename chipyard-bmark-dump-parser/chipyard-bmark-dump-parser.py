@@ -3,13 +3,28 @@
 # chipyard-bmark-dump-parser.py
 # counts the number of each instruction of each data type is present in an assembly dump of the chipyard benchmarks, stores in a nested list
 # prints the results, and calculates percentages
-# dump file is specified as a command-line argument
-# outputs to stdout and generates a .csv file
+# 
+# command line options:
+# -o  specify an output text file instead of outputting to stdout
+# -c  specify an output csv file, only contains counts and not percentages
+# -r  analyze all dump files in the input directory, instead of a single file
+#     text and csv outputs will be all in the same file
+# -t  print out a table containing only percentages of instruction types for each file anaylyzed
+#     only to be used with the -r option
+# 
+# examples:
+# python chipyard-bmark-dump-parser.py -o out.txt -c out.csv ../../benchmarks/dhrystone.riscv.dump
+# python chipyard-bmark-dump-parser.py -o out.txt -c out.csv -t -r ../../benchmarks/ > table.txt
+# 
+# requires the prettytable library
+# can be installed with 'pip install prettytable'
 
 import os
 import sys
 import copy
 import csv
+import getopt
+from prettytable import PrettyTable
 
 # open the dump file and copy to a list
 def get_dump_line_list(dump_file_path):
@@ -20,7 +35,7 @@ def get_dump_line_list(dump_file_path):
 
 # find instructions and build up the nested list with data
 def collect_instructions(dump_line_list, i_data_init):
-    i_data = i_data_init
+    i_data = copy.deepcopy(i_data_init)
     for line in dump_line_list: #iterate through lines in the dump file
         found_i_in_line = False
         for i_type in i_data[1:]: #iterate through instruction types in the instruction data
@@ -42,47 +57,67 @@ def collect_instructions(dump_line_list, i_data_init):
 def get_percent(num1, num2):
     if num2 == 0:
         return str(0)
-    return " - " + str(round(float(num1) / float(num2) * 100.0, 2)) + "%"
+    return str(round(float(num1) / float(num2) * 100.0, 2)) + "%"
 
 # print the instruction count and percentages
-def print_result(i_data):
+def print_result(i_data, dump_file_name):
+    print(dump_file_name)
     print("total instructions: " + str(i_data[0]))
     for i_type in i_data[1:]:
         if i_type[1] > 0:
-            print(i_type[0] + " - " + str(i_type[1]) + get_percent(i_type[1], i_data[0]))
+            print(i_type[0] + " - " + str(i_type[1]) + " - " + get_percent(i_type[1], i_data[0]))
         for i in i_type[2:]:
             if i[1] > 0:
-                print("\t" + i[0] + " - " + str(i[1]) + get_percent(i[1], i_type[1]) + get_percent(i[1], i_data[0]))
+                print("\t" + i[0] + " - " + str(i[1]) + " - " + get_percent(i[1], i_type[1]) + " - " + get_percent(i[1], i_data[0]))
+    print("\n\n")
+
+def output_result_to_file(i_data, dump_file_name, output_file):
+    with open(output_file, 'a') as output_file:
+        output_file.write(dump_file_name + "\n")
+        output_file.write("total instructions: " + str(i_data[0]) + "\n")
+        for i_type in i_data[1:]:
+            if i_type[1] > 0:
+                output_file.write(i_type[0] + " - " + str(i_type[1]) + " - " + get_percent(i_type[1], i_data[0]) + "\n")
+            for i in i_type[2:]:
+                if i[1] > 0:
+                    output_file.write("\t" + i[0] + " - " + str(i[1]) + " - " + get_percent(i[1], i_type[1]) + " - " + get_percent(i[1], i_data[0]) + "\n")
+        output_file.write("\n\n")
 
 def generate_csv(i_data, csv_file_path):
-    with open(csv_file_path, 'w') as csv_file:
+    with open(csv_file_path, 'a') as csv_file:
         writer = csv.writer(csv_file, delimiter=',')
 
         writer.writerow(["total instructions", str(i_data[0])])
-        writer.writerow([""])
+        writer.writerow([])
 
         for i_type in i_data[1:]:
             if i_type[1] > 0:
                 writer.writerow([i_type[0], str(i_type[1])])
 
-        writer.writerow([""])
+        writer.writerow([])
 
         for i_type in i_data[1:]:
             for i in i_type[2:]:
                 if i[1] > 0:
                     writer.writerow([i[0], str(i[1])])
 
-try:
-    dump_file_path = sys.argv[1]
-except:
-    print("error: need to specify dump file location")
-    quit()
+        writer.writerow([])
+        writer.writerow([])
 
-try:
-    csv_file_path = sys.argv[2]
-except:
-    print("error: need to specify output csv file location")
-    quit()
+def do_output(i_data, dump_file_name, output_file, output_csv):
+    if output_file == False:
+        print_result(i_data, dump_file_name)
+    else:
+        output_result_to_file(i_data, dump_file_name, output_file)
+
+    if output_csv != False:
+        generate_csv(i_data, output_csv)
+
+def get_table_row(i_data, dump_file_name):
+    row = [dump_file_name]
+    for i_type in i_data[1:]:
+        row.append(get_percent(i_type[1], i_data[0]))
+    return row
 
 i_data_init = [0, \
         ["integer computation", \
@@ -335,8 +370,47 @@ for i_type in i_data_init[1:]:
     for i in i_type[2:]:
         i.append(0)
 
-i_data = collect_instructions(get_dump_line_list(dump_file_path), i_data_init)
+output_csv = False
+recursive = False
+output_file = False
+output_table = False
 
-print_result(i_data)
-generate_csv(i_data, csv_file_path)
+options = 'c:ro:t'
+arguments = sys.argv[1:]
+options_values, other_args = getopt.getopt(arguments, options)
+for option_value in options_values:
+    if '-c' in option_value:
+        output_csv = option_value[1]
+        if(os.path.exists(output_csv)):
+            os.remove(output_csv)
+    if '-r' in option_value:
+        recursive = True
+    if '-o' in option_value:
+        output_file = option_value[1]
+        if(os.path.exists(output_file)):
+            os.remove(output_file)
+    if '-t' in option_value:
+        output_table = True
+
+dump_file_path = other_args[0]
+
+if recursive == False:
+    i_data = collect_instructions(get_dump_line_list(dump_file_path), i_data_init)
+    do_output(i_data, dump_file_path, output_file, output_csv)
+else:
+    if output_table:
+        table = PrettyTable()
+        header = ['instruction type']
+        for i_type in i_data_init[1:]:
+            header.append(i_type[0])
+        table.field_names = header
+    for cur_dump_file in sorted(os.listdir(dump_file_path)):
+        cur_dump_file_path = dump_file_path + cur_dump_file
+        i_data = collect_instructions(get_dump_line_list(cur_dump_file_path), i_data_init)
+        do_output(i_data, cur_dump_file_path, output_file, output_csv)
+        if output_table:
+            table.add_row(get_table_row(i_data, cur_dump_file))
+
+    if output_table:
+        print(table)
 
